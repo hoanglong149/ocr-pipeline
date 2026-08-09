@@ -1,0 +1,46 @@
+#!/bin/bash
+# anydoc wrapper - convert office docs to Markdown
+# Usage: anydoc-convert <input-file> [-o output.md]
+# Default: output = input file with .md extension
+# Requires: node (global anydoc CLI) or ~/venvs/anydoc/bin/python (Python binding)
+
+INPUT="$1"
+shift
+if [ -z "$INPUT" ]; then
+  echo "Usage: anydoc-convert <input-file> [-o output.md]" >&2
+  exit 1
+fi
+
+OUT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) OUT="$2"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [ -z "$OUT" ]; then
+  OUT="${INPUT%.*}.md"
+fi
+
+# Use CLI (Rust binary via npm) - fastest
+anydoc "$INPUT" -o "$OUT" 2>/dev/null
+if [ $? -eq 0 ] && [ -s "$OUT" ]; then
+  echo "OK: $INPUT -> $OUT"
+  exit 0
+fi
+
+# Fallback to Python binding
+~/venvs/anydoc/bin/python -c "
+import anydoc, sys
+md = anydoc.to_markdown('$INPUT')
+with open('$OUT', 'w') as f:
+    f.write(md)
+print('OK (python): $INPUT -> $OUT')
+" 2>/dev/null
+if [ $? -eq 0 ] && [ -s "$OUT" ]; then
+  exit 0
+fi
+
+echo "FAILED: $INPUT" >&2
+exit 1

@@ -1,0 +1,64 @@
+#!/bin/bash
+# ocr-scan.sh — OCR PDF/image scan bằng Apple Vision (local)
+# Usage: ocr-scan <file> [lang] [output.md]
+# lang: zh-Hans (default), vi-VN, en-US
+# Support: PDF (tự split từng trang), PNG, JPG, TIFF
+# Output: text ra stdout hoặc output.md
+
+FILE="$1"
+LANG_CODE="${2:-zh-Hans}"
+OUT="$3"
+SCRIPT="/usr/local/bin/ocr-vision.swift"
+WORKDIR="/tmp/ocr-scan-$$"
+
+if [ -z "$FILE" ]; then
+  echo "Usage: ocr-scan <file> [lang] [output.md]" >&2
+  exit 1
+fi
+
+mkdir -p "$WORKDIR"
+
+ocr_one() {
+  local img="$1"
+  swift "$SCRIPT" "$img" "$LANG_CODE" 2>/dev/null
+}
+
+EXT="${FILE##*.}"
+EXT=$(echo "$EXT" | tr '[:upper:]' '[:lower:]')
+
+case "$EXT" in
+  pdf)
+    # Split PDF thành từng trang PNG
+    sips -s format png "$FILE" --out "$WORKDIR/page-%d.png" >/dev/null 2>&1
+    # Nếu sips không split được nhiều trang, thử cách khác
+    if ! ls "$WORKDIR"/page-*.png >/dev/null 2>&1; then
+      # Dùng Quartz qua python? Fallback: sips chỉ ra 1 trang
+      sips -s format png "$FILE" --out "$WORKDIR/page-0.png" >/dev/null 2>&1
+    fi
+    ;;
+  png|jpg|jpeg|tiff|tif|bmp|gif)
+    cp "$FILE" "$WORKDIR/page-0.png"
+    ;;
+  *)
+    echo "Unsupported: $EXT (dùng PDF/PNG/JPG)" >&2
+    rm -rf "$WORKDIR"
+    exit 1
+    ;;
+esac
+
+RESULT=""
+PAGES=$(ls "$WORKDIR"/page-*.png 2>/dev/null | wc -l | tr -d ' ')
+for page in "$WORKDIR"/page-*.png; do
+  [ -f "$page" ] || continue
+  TEXT=$(ocr_one "$page")
+  RESULT="$RESULT$TEXT"$'\n'
+done
+
+if [ -n "$OUT" ]; then
+  echo "$RESULT" > "$OUT"
+  echo "OK: $FILE -> $OUT ($PAGES pages)" >&2
+else
+  echo "$RESULT"
+fi
+
+rm -rf "$WORKDIR"
