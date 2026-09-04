@@ -10,6 +10,7 @@ Pipeline OCR/convert tài liệu chạy local trên macOS — không cloud, khô
 | `ocr-vision-bin` | Binary đã compile (nhanh hơn swift script) | `swiftc -O` |
 | `ocr-scan` | OCR PDF scan/ảnh, tự split trang | Apple Vision + sips |
 | `anydoc-convert` | Convert DOCX/XLSX/PPT/PDF(text) → Markdown | firecrawl-anydoc (Rust) |
+| `hybrid_v2.py` | Hybrid OCR: document mode + GLM-OCR | Apple Vision + Ollama GLM-OCR |
 
 ## Cài đặt
 
@@ -73,11 +74,35 @@ swift /usr/local/bin/ocr-vision.swift image.png zh-Hans
 | Ký tự Hán phức tạp + mờ | Trung bình (cần check lại) |
 | Công thức toán/LaTeX | ❌ Không hỗ trợ (plain text) |
 
+## Hybrid OCR v2 (Document Mode + GLM-OCR)
+
+Kết hợp Apple Vision document mode (structured text) + GLM-OCR (table/formula) qua Ollama.
+
+### Yêu cầu
+- macOS 26+ (cho `RecognizeDocumentsRequest`)
+- Ollama với model `glm-ocr:latest`
+- `~/bin/mac-ocr-dev` (build từ source)
+
+### Cách dùng
+```bash
+# Test 5 trang
+python3 bin/hybrid_v2.py <pdf> <output_dir> 0 5
+
+# Chạy full book
+python3 bin/hybrid_v2.py <pdf> <output_dir>
+```
+
+### Workflow
+1. mac-ocr document → structured text (Neural Engine, ~1s/trang)
+2. Detect trang cần GLM-OCR (formula, table patterns)
+3. GLM-OCR → table + formula (~20s/trang)
+4. Merge → markdown
+
 ## Lưu ý
 
 - **Không OCR được PDF scan** bằng anydoc — dùng `ocr-scan` cho scan
 - **Không tính formula Excel** — anydoc chỉ lấy text; dùng openpyxl nếu cần giá trị
-- **Không LaTeX** — Apple Vision xuất plain text; sách toán cần Qwen legacy
+- **Không LaTeX** — Apple Vision xuất plain text; sách toán cần Qwen legacy hoặc GLM-OCR
 - **File scan mờ** → check lại ký tự Hán, số liệu vẫn tin được
 
 ## Tham khảo
